@@ -1,47 +1,144 @@
-# car_detection
+# Car Detection & Counting System
+
+## Overview
+This repository implements a **real-time car tracking and counting system** built around a modular computer vision pipeline.
+
+The goal is to **detect vehicles** in a video stream, **maintain stable identities** for each detection across consecutive frames, and **increment a counter** whenever a vehicle crosses a predefined line or region of interest.
+
+The baseline solution relies on classical motion analysis to propose candidate boxes and a **centroid-based tracker** to preserve identity, while the architecture leaves a clean insertion point for modern deep-learning detectors such as **YOLO** to replace or augment the detection stage when accuracy in complex scenes is required.
+
+---
+
+## System Architecture
+The software is organized as **three cooperating layers** that communicate through simple, well-defined data structures:
+
+1. **Frame Reader Layer** (`reader_frames.py`)  
+   - Acquires frames from a file, webcam, or network stream.  
+   - Normalizes resolution and color space as needed.  
+   - Provides consistent timing to the processing loop.
+
+2. **Tracking Core Layer** (`CLASS_CentroidTracker.py`)  
+   - Manages object identities using a centroid representation.  
+   - Tracks each object by its geometric center and motion consistency.
+
+3. **Application & Coordination Layer** (`main.py`)  
+   - Fetches frames, runs detection, updates the tracker, applies counting policy.  
+   - Renders annotated output or forwards it to logs or encoders.
+
+This separation enforces a **high-cohesion, low-coupling design**:  
+- The reader focuses on input stability.  
+- The tracker maintains identity persistence.  
+- The coordinator defines system behavior independently of detection backend.  
+
+Each layer can evolve **independently** without affecting the rest of the system.
+
+---
+
+## Internal Structure & Data Flow
+Execution follows a **deterministic frame loop**:
+
+1. **Frame Acquisition:**  
+   The reader yields frames in a predictable format.  
+2. **Detection Stage:**  
+   - Classical mode: background subtraction or contour analysis.  
+   - Deep-learning mode: **YOLO** returns class-labeled boxes + confidence scores.
+3. **Tracking Stage:**  
+   - Converts each bounding box into a centroid.  
+   - Associates new centroids with existing IDs by minimizing spatial distance.  
+   - Unmatched detections → register new ID.  
+   - Unmatched IDs → increase disappearance counter → deregister if too long.
+4. **Counting Stage:**  
+   - Checks if each trajectory crosses the **counting line or region**.  
+   - Increments counter according to direction.
+
+The tracker maintains:
+- A registry mapping IDs to centroids.  
+- Disappearance counters.  
+- An auto-incrementing ID allocator.
+
+Result: **predictable, memory-light, easy to debug.**
+
+---
+
+## Code Organization
+| File | Description |
+|------|--------------|
+| `reader_frames.py` | Handles video capture, resolution control, and frame consistency. |
+| `CLASS_CentroidTracker.py` | Implements the centroid-based tracker and ID management. |
+| `main.py` | Entry point that wires everything together, runs the loop, and visualizes results. |
+
+---
+
+## ⚙️ Configuration & Parameters
+All parameters are centralized in `main.py` for easy tuning:
+- Counting line coordinates.
+- Disappearance tolerance (frames an object can vanish).
+- Minimum area / confidence threshold for detections.
+- YOLO configuration:  
+  model variant, image size, confidence, NMS threshold, and vehicle class IDs.
+
+Parameters are read once at startup to ensure **reproducible behavior**.
+
+---
+
+## Counting Policy & Regions of Interest
+- Default: **Line-based counting** (robust and easy to interpret).  
+- The line is placed orthogonally to the traffic direction for clarity.
+- Can generalize to **polygonal ROIs**:  
+  a transition from inside → outside (or vice versa) counts as an event.
+
+Each crossing event is logged once per object ID to avoid duplicates.
+
+---
+
+## Performance Considerations
+- **Classical detector:** lightweight, CPU-friendly.  
+- **YOLO mode:** uses GPU for real-time inference.  
+- **Centroid tracker:** O(n²) complexity but small constant factors.
+
+**Tips for optimization:**
+- Downscale frames moderately to remove noise and keep FPS high.  
+- Keep frame size sufficient only for the level of detail required.
+
+---
+
+## Testing & Debugging
+Thanks to the modular design, each component can be tested independently:
+
+| Module | Test Focus |
+|---------|-------------|
+| Reader | Frame rate & color correctness |
+| Detector | Visualize boxes before tracking |
+| Tracker | Synthetic centroid streams → ID stability |
+| Coordinator | Replayed annotated clips → check count accuracy |
+
+Simple **unit tests** can be written easily since all data is pure Python.
+
+---
+
+## Limitations & Future Work
+- Under heavy occlusion or perspective distortion, accuracy may drop.  
+- Extend to **multi-lane bidirectional roads** (lane-specific counters).  
+- Enrich YOLO integration with **class-aware filtering** and smoothing.  
+- Add modules for:
+  - **Speed estimation**
+  - **Lane adherence**
+  - **Database logging / message queues**
+
+These can be implemented without changing the existing architecture.
+
+---
+
+## Summary
+- **Modular, clean, and real-time** vehicle detection and counting system.  
+- Combines **YOLOv8** detection + **Centroid tracking** for identity persistence.  
+- Scalable architecture ready for deep learning enhancements.  
+- Ideal foundation for traffic analytics, parking monitoring, or smart cities.
+
+---
+
+### 🧑‍💻 Authors
+Project: *Car Detection and Counting System*  
+Language: Python (OpenCV, NumPy, Ultralytics YOLO)
 
 
-Car Tracking and Counting System
-
-Overview
-
-This repository implements a real-time car tracking and counting system built around a modular computer vision pipeline. The goal is to detect vehicles in a video stream, maintain stable identities for each detection across consecutive frames, and increment a running count whenever a vehicle crosses a predefined line or region of interest. The baseline solution relies on classical motion analysis to propose candidate boxes and a centroid-based tracker to preserve identity, while the architecture leaves a clean insertion point for modern deep-learning detectors such as YOLO to replace or augment the detection stage when accuracy in complex scenes is required.
-
-System Architecture
-
-The software is organized as three cooperating layers that communicate through simple, well-defined data structures. The frame reader layer, implemented in reader_frames.py, is responsible for acquiring frames from a file, webcam, or network stream, normalizing resolution and color space as needed, and handing off each frame to the processing loop with consistent timing. The tracking core layer, implemented in CLASS_CentroidTracker.py, encapsulates the identity management logic using a centroid representation; each object is tracked by its geometric center and matched between frames by spatial proximity and motion consistency. The application and coordination layer, implemented in main.py, orchestrates the loop that fetches frames, runs the detector, updates the tracker, applies the counting policy, and renders annotated output for visualization or downstream logging.
-
-This separation enforces a high-cohesion, low-coupling design. The reader focuses purely on input stability, the tracker maintains state and identity persistence, and the coordinator defines the system’s behavior while remaining agnostic to the specific detection backend. As a result, each layer can evolve independently without ripple effects across the rest of the codebase.
-
-Internal Structure and Data Flow
-
-The execution proceeds as a deterministic frame loop. Each iteration begins with frame acquisition from the reader, which returns an image in a predictable format. The detection stage then proposes bounding boxes for candidate vehicles. In the classical configuration this is done via background subtraction or frame differencing followed by contour analysis; in the deep-learning configuration it is handled by a YOLO model that yields class-labeled boxes with confidence scores. The coordinator converts each bounding box into a centroid and forwards the set of centroids to the tracking core.
-
-The tracker’s update routine associates new centroids with existing tracked IDs by minimizing distances between current and previous positions under reasonable motion assumptions. When an existing object cannot be matched in the current frame, its disappearance counter increases; when a new centroid cannot be matched to any existing object, a fresh ID is registered. When an object’s disappearance counter exceeds a threshold, the tracker deregisters it to prevent stale tracks from lingering. Internally the tracker maintains a registry that maps IDs to last-known centroids, a map of disappearance counters keyed by ID, and an integer allocator that assigns the next available ID in strictly increasing order. This lean state makes the tracker predictable, memory-light, and easy to debug.
-
-Once the tracker returns the updated identities and positions, the coordinator evaluates each object trajectory against the counting policy. The most common configuration defines a straight counting line in image coordinates; a crossing event is detected when an object’s centroid is observed on one side of the line in a previous frame and on the opposite side in the current frame, optionally constrained by direction to avoid double counting. The coordinator then overlays bounding boxes, IDs, trajectories if desired, and the current count on the frame and either displays it interactively or forwards it to an encoder or logger.
-
-
-Code Organization
-
-The repository centers on three Python modules that mirror the architectural layers. The file reader_frames.py encapsulates video capture, resolution control, frame color conversion, and end-of-stream handling, and exposes a simple interface that yields frames to the coordinator. The file CLASS_CentroidTracker.py defines the centroid tracker class with methods to register new objects, update matches for current detections, increment disappearance counters, and deregister objects that have been missing for too long. The file main.py acts as the entry point that wires the reader and tracker together, selects the detection method, maintains the global count, and manages visualization, keyboard control, and optional logging.
-
-Configuration and Parameters
-
-All operational parameters are concentrated in the coordinator so that behavior can be tuned without editing the tracking core. Typical configuration includes the coordinates of the counting line, the disappearance tolerance that controls how many frames an object can vanish before it is removed, and the minimum area or confidence thresholds for detections to suppress noise. When YOLO is used, the coordinator also defines the model variant, input size, confidence and non-maximum suppression thresholds, and the set of class IDs that should be considered vehicles. These parameters are read once at startup and remain constant during the run to ensure reproducible behavior.
-
-Counting Policy and Regions of Interest
-
-The system supports simple line-based counting by default because it is robust and easy to interpret. The line is placed according to the camera viewpoint so that traffic crosses it orthogonally whenever possible, which reduces ambiguous glancing interactions and improves direction discrimination. The same mechanism can be generalized to polygonal regions of interest by tracking whether successive centroid positions fall inside or outside the region; a transition constitutes a counted event. In both cases the policy considers the object’s last-known position to prevent multiple increments for oscillating centroids near the boundary.
-
-Performance Considerations
-
-The baseline motion-based detector is computationally light and suitable for CPUs on laptops or embedded boards, while the YOLO path benefits from GPU acceleration to maintain real-time throughput at higher resolutions. The centroid tracker itself is O(n²) in the number of detections when using greedy matching on distances, but the constant factors are small for typical traffic scenes. Practical deployments benefit from resizing frames to a resolution that preserves license-plate-scale details only if necessary for downstream tasks, otherwise a moderate downscale reduces noise and improves stability without sacrificing counting accuracy.
-
-Testing and Debugging
-
-The modular design simplifies validation. The reader can be tested independently by verifying frame rate and color correctness on diverse inputs. The detector can be validated by visualizing raw boxes before tracking to ensure that proposals are reasonable. The tracker can be stress-tested with synthetic centroid streams to confirm stable ID assignment, disappearance handling, and deregistration timing. The coordinator’s counting logic can be exercised by replaying annotated clips where ground truth crossings are known and checking that the total matches expectations. Because all interfaces are simple Python data structures, unit tests can be written without complex fixtures or mocks.
-
-Limitations and Future Work
-
-The system’s accuracy under heavy occlusion and extreme perspective can be improved by incorporating motion models and appearance descriptors to complement pure centroid distance. The counting policy can be extended to handle multi-lane bidirectional roads by segmenting the scene into lane-specific regions and maintaining per-lane counters. Integration with YOLO can be deepened by class-aware filtering that uses different disappearance tolerances for different vehicle types, and by temporal smoothing of detection confidences. Additional modules for speed estimation, lane adherence, and event logging to databases or message queues would round out a production deployment while keeping the existing architecture intact.
