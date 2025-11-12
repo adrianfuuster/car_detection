@@ -69,7 +69,7 @@ Result: **predictable, memory-light, easy to debug.**
 
 ---
 
-## ⚙️ Configuration & Parameters
+## Configuration & Parameters
 All parameters are centralized in `main.py` for easy tuning:
 - Counting line coordinates.
 - Disappearance tolerance (frames an object can vanish).
@@ -137,7 +137,7 @@ These can be implemented without changing the existing architecture.
 
 ---
 
-### 🧑‍💻 Authors
+### Authors
 Project: *Car Detection and Counting System*  
 Language: Python (OpenCV, NumPy, Ultralytics YOLO)
 
