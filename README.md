@@ -140,5 +140,11 @@ These can be implemented without changing the existing architecture.
 ### Authors
 Project: *Car Detection and Counting System*  
 Language: Python (OpenCV, NumPy, Ultralytics YOLO)
+* **Marc Cases**
+* **Álvaro Bello**
+* **Namanmahi Kumar**
+* **Adrián Fuster**
+
+Universitat Autònoma de Barcelona - 2025
 
 
